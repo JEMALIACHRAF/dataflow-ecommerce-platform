@@ -15,10 +15,11 @@ import pytest
 from pyspark.sql import Row, SparkSession
 from pyspark.sql import functions as F
 
+
 from transforms.silver.clickstream_processor import (
-    VALID_EVENT_TYPES,
     ClickstreamSilverProcessor,
-    create_spark_session,
+    VALID_EVENT_TYPES,
+    BRONZE_SCHEMA,
 )
 
 
