@@ -19,7 +19,6 @@ fakeredis==2.23.1
 
 # --- MongoDB ---
 pymongo==4.7.2
-pymongo[srv]==4.6.3
 # --- HTTP / validation ---
 requests==2.32.2
 urllib3==2.2.1
