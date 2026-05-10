@@ -1,0 +1,177 @@
+version: 2
+
+# ---------------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------------
+
+sources:
+  - name: silver
+    database: DATAFLOW_PROD
+    schema: SILVER
+    description: "Cleaned and typed Silver layer data from Medallion Lakehouse"
+    freshness:
+      warn_after:  { count: 6,  period: hour }
+      error_after: { count: 12, period: hour }
+    loaded_at_field: _silver_processed_at
+    tables:
+      - name: clickstream
+        description: "2B+ daily clickstream events — deduplicated, GDPR-anonymised"
+      - name: orders
+        description: "Cleaned order transactions from all 15 sources"
+      - name: customers
+        description: "User profiles synced from MongoDB every hour via Airbyte"
+
+# ---------------------------------------------------------------------------
+# Staging models
+# ---------------------------------------------------------------------------
+
+models:
+  - name: stg_orders
+    description: "Staging orders — casted types, null handling, currency normalisation"
+    columns:
+      - name: order_id
+        description: "Unique order identifier (UUID)"
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests: [ not_null ]
+      - name: revenue_eur
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100000
+      - name: order_status
+        tests:
+          - accepted_values:
+              values: [ 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'refunded' ]
+      - name: order_date
+        tests: [ not_null ]
+
+  - name: stg_customers
+    description: "Customer profiles from MongoDB → Snowflake (hourly Airbyte sync)"
+    columns:
+      - name: customer_id
+        tests: [ unique, not_null ]
+      - name: email
+        tests: [ not_null ]
+      - name: country_code
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "LENGTH(country_code) = 2"
+
+# ---------------------------------------------------------------------------
+# Mart models
+# ---------------------------------------------------------------------------
+
+  - name: fact_orders
+    description: >
+      Central fact table — grain: one row per order line item.
+      Joined to all four dimensions via surrogate keys.
+      Updated daily by 06:00 UTC.
+    meta:
+      owner: data-engineering@dataflow.io
+      sla: "06:00 UTC"
+    columns:
+      - name: order_line_id
+        description: "Surrogate key (SHA-256 of order_id + line_item_id)"
+        tests: [ unique, not_null ]
+      - name: customer_sk
+        tests: [ not_null ]
+      - name: product_sk
+        tests: [ not_null ]
+      - name: time_sk
+        tests: [ not_null ]
+      - name: gross_revenue_eur
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: net_revenue_eur
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "net_revenue_eur <= gross_revenue_eur"
+      - name: order_status
+        tests:
+          - accepted_values:
+              values: [ 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'refunded' ]
+      - name: referrer_channel
+        tests:
+          - accepted_values:
+              values: [ 'direct', 'organic_search', 'social', 'referral', 'internal', 'unknown' ]
+
+  - name: dim_customers
+    description: "Customer dimension — SCD Type 2 (full history preserved)"
+    columns:
+      - name: customer_sk
+        description: "Surrogate key"
+        tests: [ unique, not_null ]
+      - name: customer_id
+        tests: [ not_null ]
+      - name: is_current
+        tests:
+          - not_null
+          - accepted_values:
+              values: [ true, false ]
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              values: [ 'high_value', 'mid', 'low', 'churned' ]
+      - name: loyalty_tier
+        tests:
+          - accepted_values:
+              values: [ 'gold', 'silver', 'bronze', null ]
+
+  - name: dim_products
+    description: "Product catalogue dimension — SCD Type 2"
+    columns:
+      - name: product_sk
+        tests: [ unique, not_null ]
+      - name: product_id
+        tests: [ not_null ]
+      - name: category_l1
+        tests: [ not_null ]
+      - name: is_current
+        tests:
+          - accepted_values:
+              values: [ true, false ]
+
+  - name: dim_time
+    description: "Date/time spine — 2020-01-01 to 2030-12-31"
+    columns:
+      - name: time_sk
+        tests: [ unique, not_null ]
+      - name: calendar_date
+        tests: [ unique, not_null ]
+
+# ---------------------------------------------------------------------------
+# Custom data freshness assertions (run post-load)
+# ---------------------------------------------------------------------------
+
+exposures:
+  - name: revenue_dashboard
+    type: dashboard
+    maturity: high
+    url: "https://metabase.dataflow.io/dashboard/42"
+    description: "Executive revenue dashboard — consumed by C-level daily"
+    owner:
+      name: Analytics Team
+      email: analytics@dataflow.io
+    depends_on:
+      - ref('fact_orders')
+      - ref('dim_customers')
+      - ref('dim_products')
+      - ref('dim_time')
+
+  - name: ml_feature_store
+    type: ml
+    maturity: medium
+    description: "Customer behaviour features for churn and LTV models"
+    owner:
+      name: ML Platform Team
+      email: ml@dataflow.io
+    depends_on:
+      - ref('fact_orders')
+      - ref('dim_customers')

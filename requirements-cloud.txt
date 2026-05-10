@@ -1,0 +1,31 @@
+# =====================================================================
+# requirements-cloud.txt — dépendances cloud (prod GCP/Snowflake/Airflow)
+# NE PAS installer en local — uniquement sur les workers GKE
+# =====================================================================
+
+# GCP
+google-cloud-storage==2.16.0
+google-cloud-bigquery==3.20.1
+google-cloud-secret-manager==2.20.0
+
+# Snowflake
+snowflake-connector-python==3.10.0
+snowflake-sqlalchemy==1.5.3
+
+# Airflow (Linux uniquement — ne fonctionne pas sur Windows)
+# apache-airflow==2.8.4
+
+# MongoDB async
+motor==3.4.0
+
+# dbt (installer via : pip install dbt-snowflake)
+# dbt-utils est un package dbt, PAS pip → voir packages.yml
+dbt-snowflake==1.7.4
+
+# Observability
+datadog==0.49.1
+opentelemetry-api==1.24.0
+opentelemetry-sdk==1.24.0
+
+# Data quality
+great-expectations==0.18.15

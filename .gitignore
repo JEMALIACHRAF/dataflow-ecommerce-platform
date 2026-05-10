@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Secrets
+*.pem
+*.key
+service-account*.json
+credentials*.json
+
+# dbt
+models/target/
+models/dbt_packages/
+models/logs/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
+
+# Spark local
+derby.log
+metastore_db/
+spark-warehouse/
+# GCP key
+gcp-key.json
+*-key.json
+
+# Local data
+C:/tmp/
+*.parquet
+test_cache.py
+generate_data.py
+
+# dbt target
+models/dataflow_ecommerce/target/
+models/dataflow_ecommerce/dbt_packages/
+models/dataflow_ecommerce/logs/

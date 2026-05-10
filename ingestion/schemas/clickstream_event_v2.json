@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dataflow.io/schemas/clickstream_event/v2.json",
+  "title": "ClickstreamEvent",
+  "description": "Schema contract for all clickstream events ingested into the Bronze layer. Validated at ingestion time by the REST API connector and at transformation time by Great Expectations.",
+  "type": "object",
+  "required": ["event_id", "event_type", "event_timestamp"],
+  "additionalProperties": true,
+
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "UUID v4 — globally unique per event",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+    },
+
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "Browser session ID — shared across all events in one session",
+      "minLength": 1
+    },
+
+    "user_id": {
+      "type": ["string", "null"],
+      "description": "Authenticated user ID — null for anonymous visitors"
+    },
+
+    "anonymous_id": {
+      "type": ["string", "null"],
+      "description": "Anonymous tracking ID (persists across sessions via cookie)"
+    },
+
+    "event_type": {
+      "type": "string",
+      "description": "Categorical event type — controlled vocabulary",
+      "enum": [
+        "page_view",
+        "product_view",
+        "add_to_cart",
+        "remove_from_cart",
+        "checkout_start",
+        "checkout_complete",
+        "purchase",
+        "search",
+        "wishlist_add",
+        "promo_click",
+        "session_start",
+        "session_end"
+      ]
+    },
+
+    "event_timestamp": {
+      "type": "string",
+      "description": "Event time — ISO 8601 preferred; Unix ms/s also accepted",
+      "examples": [
+        "2024-01-15T14:30:00.000Z",
+        "2024-01-15T14:30:00Z",
+        "1705329000000",
+        "1705329000"
+      ]
+    },
+
+    "page_url": {
+      "type": ["string", "null"],
+      "description": "Full URL of the page where the event occurred",
+      "format": "uri",
+      "maxLength": 2048
+    },
+
+    "referrer_url": {
+      "type": ["string", "null"],
+      "description": "HTTP Referer header value",
+      "format": "uri",
+      "maxLength": 2048
+    },
+
+    "device_type": {
+      "type": ["string", "null"],
+      "enum": ["desktop", "mobile", "tablet", null]
+    },
+
+    "os": {
+      "type": ["string", "null"],
+      "description": "Operating system (lowercase, e.g. 'ios', 'android', 'windows', 'macos')"
+    },
+
+    "browser": {
+      "type": ["string", "null"],
+      "description": "Browser identifier (lowercase, e.g. 'chrome', 'safari', 'firefox')"
+    },
+
+    "country_code": {
+      "type": ["string", "null"],
+      "description": "ISO 3166-1 alpha-2 country code (uppercase)",
+      "pattern": "^[A-Z]{2}$",
+      "examples": ["FR", "DE", "ES", "GB"]
+    },
+
+    "ip_address": {
+      "type": ["string", "null"],
+      "description": "Raw IP address — anonymised in Silver layer (GDPR Art. 25). Never stored past Bronze.",
+      "examples": ["192.168.1.100", "2001:db8::1"]
+    },
+
+    "properties": {
+      "type": ["string", "null"],
+      "description": "JSON-encoded event-specific payload",
+      "examples": [
+        "{\"product_id\": \"SKU-12345\", \"price\": 29.99, \"currency\": \"EUR\"}",
+        "{\"search_query\": \"chaussures running\", \"results_count\": 142}"
+      ]
+    },
+
+    "revenue": {
+      "type": ["string", "null"],
+      "description": "Raw revenue value (string to accommodate '29,99 EUR' etc.). Parsed to float in Silver.",
+      "examples": ["29.99", "29,99", "€29.99", "29.99 EUR"]
+    },
+
+    "_source": {
+      "type": ["string", "null"],
+      "description": "Originating source system identifier",
+      "examples": ["storefront_fr", "storefront_de", "mobile_app_ios"]
+    }
+  },
+
+  "anyOf": [
+    {"required": ["user_id"],      "properties": {"user_id":      {"type": "string"}}},
+    {"required": ["anonymous_id"], "properties": {"anonymous_id": {"type": "string"}}}
+  ]
+}

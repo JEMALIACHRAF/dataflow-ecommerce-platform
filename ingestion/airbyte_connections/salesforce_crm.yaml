@@ -1,0 +1,98 @@
+# ingestion/airbyte_connections/salesforce_crm.yaml
+#
+# Airbyte Connection — Salesforce CRM → Snowflake
+# Sync toutes les 6 heures — accounts, contacts, opportunities
+
+apiVersion: "airbyte.io/v1alpha1"
+kind: Connection
+
+metadata:
+  name: salesforce-crm-to-snowflake
+  labels:
+    team: data-engineering
+    source: salesforce
+    destination: snowflake
+    sync_frequency: 6h
+    env: dev
+
+spec:
+  source:
+    name: salesforce-prod
+    connectorType: source-salesforce
+    config:
+      client_id:     "${SALESFORCE_CLIENT_ID}"
+      client_secret: "${SALESFORCE_CLIENT_SECRET}"
+      refresh_token: "${SALESFORCE_REFRESH_TOKEN}"
+      start_date:    "2020-01-01T00:00:00Z"
+      is_sandbox:    false
+      streams:
+        - Account
+        - Contact
+        - Opportunity
+        - OpportunityLineItem
+        - Product2
+        - Campaign
+        - Lead
+
+  destination:
+    name: snowflake-dev
+    connectorType: destination-snowflake
+    config:
+      host:      "${SNOWFLAKE_ACCOUNT}.snowflakecomputing.com"
+      username:  "${SNOWFLAKE_USER}"
+      password:  "${SNOWFLAKE_PASSWORD}"
+      database:  "${SNOWFLAKE_DATABASE}"
+      schema:    "RAW_SALESFORCE"
+      warehouse: "${SNOWFLAKE_WAREHOUSE}"
+      role:      "${SNOWFLAKE_ROLE}"
+
+  syncCatalog:
+    streams:
+      - stream:
+          name: Account
+          namespace: salesforce
+        config:
+          syncMode: incremental
+          destinationSyncMode: append_dedup
+          cursorField: ["SystemModstamp"]
+          primaryKey: [["Id"]]
+
+      - stream:
+          name: Contact
+          namespace: salesforce
+        config:
+          syncMode: incremental
+          destinationSyncMode: append_dedup
+          cursorField: ["SystemModstamp"]
+          primaryKey: [["Id"]]
+
+      - stream:
+          name: Opportunity
+          namespace: salesforce
+        config:
+          syncMode: incremental
+          destinationSyncMode: append_dedup
+          cursorField: ["SystemModstamp"]
+          primaryKey: [["Id"]]
+
+      - stream:
+          name: Lead
+          namespace: salesforce
+        config:
+          syncMode: incremental
+          destinationSyncMode: append_dedup
+          cursorField: ["SystemModstamp"]
+          primaryKey: [["Id"]]
+
+  schedule:
+    scheduleType: cron
+    cronExpression: "0 */6 * * *"    # toutes les 6 heures
+
+  status: active
+
+  notificationSettings:
+    sendOnSuccess: false
+    sendOnFailure: true
+    notificationType: slack
+    slackConfiguration:
+      webhook: "${SLACK_WEBHOOK_DATA_ALERTS}"

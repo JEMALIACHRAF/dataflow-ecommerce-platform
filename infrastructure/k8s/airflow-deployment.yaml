@@ -1,0 +1,286 @@
+# infrastructure/k8s/airflow-deployment.yaml
+#
+# Apache Airflow 2.8 sur GKE
+# CeleryExecutor — auto-scaling 3 → 20 workers
+# Secrets injectés via GCP Secret Manager (jamais hardcodés)
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: airflow
+  labels:
+    team: data-engineering
+    managed-by: terraform
+
+---
+# ─────────────────────────────────────────
+# ConfigMap — variables non-sensibles
+# ─────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-config
+  namespace: airflow
+data:
+  AIRFLOW__CORE__EXECUTOR:           "CeleryExecutor"
+  AIRFLOW__CORE__LOAD_EXAMPLES:      "false"
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+  AIRFLOW__LOGGING__REMOTE_LOGGING:  "true"
+  AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: "gs://dataflow-dev-bronze/airflow-logs"
+  GCP_PROJECT:                       "projet-dbt-495310"
+  SNOWFLAKE_DATABASE:                "DATAFLOW_DEV"
+  SNOWFLAKE_WAREHOUSE:               "ANALYTICS_WH"
+  SNOWFLAKE_ROLE:                    "TRANSFORMER_ROLE"
+  PROCESSING_DATE:                   "2024-01-15"
+
+---
+# ─────────────────────────────────────────
+# Secret — credentials sensibles
+# (en prod : injectés depuis GCP Secret Manager)
+# ─────────────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: airflow-secrets
+  namespace: airflow
+type: Opaque
+stringData:
+  SNOWFLAKE_ACCOUNT:   "${SNOWFLAKE_ACCOUNT}"
+  SNOWFLAKE_USER:      "${SNOWFLAKE_USER}"
+  SNOWFLAKE_PASSWORD:  "${SNOWFLAKE_PASSWORD}"
+  MONGODB_URI:         "${MONGODB_URI}"
+  REDIS_URL:           "${REDIS_URL}"
+  SLACK_WEBHOOK:       "${SLACK_WEBHOOK_DATA_ALERTS}"
+  GCP_SA_KEY:          "${GCP_SA_KEY_BASE64}"
+
+---
+# ─────────────────────────────────────────
+# Airflow Webserver
+# ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: airflow
+  labels:
+    app: airflow
+    component: webserver
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: airflow
+      component: webserver
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: webserver
+    spec:
+      serviceAccountName: airflow-worker
+      containers:
+        - name: webserver
+          image: apache/airflow:2.8.4-python3.11
+          command: ["airflow", "webserver"]
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+      volumes:
+        - name: dags
+          persistentVolumeClaim:
+            claimName: airflow-dags-pvc
+
+---
+# ─────────────────────────────────────────
+# Airflow Scheduler (HA — 2 replicas)
+# ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: airflow
+  labels:
+    app: airflow
+    component: scheduler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: airflow
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: scheduler
+    spec:
+      serviceAccountName: airflow-worker
+      containers:
+        - name: scheduler
+          image: apache/airflow:2.8.4-python3.11
+          command: ["airflow", "scheduler"]
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          livenessProbe:
+            exec:
+              command: ["airflow", "jobs", "check", "--job-type", "SchedulerJob"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+      volumes:
+        - name: dags
+          persistentVolumeClaim:
+            claimName: airflow-dags-pvc
+
+---
+# ─────────────────────────────────────────
+# Celery Workers — HPA 3 → 20
+# ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-worker
+  namespace: airflow
+  labels:
+    app: airflow
+    component: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: airflow
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: worker
+    spec:
+      serviceAccountName: airflow-worker
+      containers:
+        - name: worker
+          image: apache/airflow:2.8.4-python3.11
+          command: ["airflow", "celery", "worker"]
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secrets
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+      volumes:
+        - name: dags
+          persistentVolumeClaim:
+            claimName: airflow-dags-pvc
+
+---
+# ─────────────────────────────────────────
+# HPA — auto-scale workers 3 → 20
+# Déclenché sur Black Friday / soldes
+# ─────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: airflow-worker-hpa
+  namespace: airflow
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: airflow-worker
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# ─────────────────────────────────────────
+# Service + Ingress
+# ─────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-webserver
+  namespace: airflow
+spec:
+  selector:
+    app: airflow
+    component: webserver
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: airflow-ingress
+  namespace: airflow
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    networking.gke.io/managed-certificates: "airflow-tls"
+spec:
+  rules:
+    - host: airflow.dataflow-internal.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: airflow-webserver
+                port:
+                  number: 80

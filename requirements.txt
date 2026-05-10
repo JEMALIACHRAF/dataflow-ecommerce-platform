@@ -1,0 +1,35 @@
+# =====================================================================
+# requirements.txt — Windows local (Python 3.11)
+# Versions testées compatibles entre elles
+# =====================================================================
+
+# --- PySpark + Delta Lake (versions compatibles ensemble) ---
+pyspark==3.5.1
+delta-spark==3.2.0          # 3.2.0 supporte pyspark 3.5.x (2.4.0 = incompatible)
+
+# --- Formats / sérialisation ---
+pyarrow==16.0.0
+pandas==2.2.2
+msgpack==1.0.8
+lz4==4.3.3
+
+# --- Cache Redis ---
+redis==5.0.4
+fakeredis==2.23.1
+
+# --- MongoDB ---
+pymongo==4.7.2
+pymongo[srv]==4.6.3
+# --- HTTP / validation ---
+requests==2.32.2
+urllib3==2.2.1
+jsonschema==4.22.0
+
+# --- Tests ---
+pytest==8.2.0
+pytest-cov==5.0.0
+
+# --- Utils ---
+python-dotenv==1.0.1
+pydantic==2.7.1
+click==8.1.7

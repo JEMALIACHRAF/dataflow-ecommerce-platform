@@ -1,0 +1,30 @@
+# ============================================================
+# requirements-core.txt
+# Dépendances MINIMALES pour faire tourner PySpark en local
+# Compatible Python 3.11 / Windows
+#
+# Usage:
+#   pip install -r requirements-core.txt
+# ============================================================
+
+# PySpark + Delta Lake
+pyspark==3.5.1
+delta-spark==2.4.0
+
+# Formats de données
+pyarrow==16.0.0
+pandas==2.2.2
+
+# Cache Redis (tests avec fakeredis — pas besoin de Docker)
+redis==5.0.4
+fakeredis==2.23.1
+msgpack==1.0.8
+lz4==4.3.3
+
+# Tests
+pytest==8.2.0
+pytest-cov==5.0.0
+
+# Utilitaires
+python-dotenv==1.0.1
+requests==2.32.2

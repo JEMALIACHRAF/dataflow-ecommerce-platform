@@ -1,0 +1,83 @@
+# ingestion/airbyte_connections/mongodb_user_profiles.yaml
+#
+# Airbyte Connection — MongoDB Atlas → Snowflake
+# Sync toutes les heures — profils utilisateurs
+# Variables d'env définies dans .env (jamais hardcodées)
+
+apiVersion: "airbyte.io/v1alpha1"
+kind: Connection
+
+metadata:
+  name: mongodb-profiles-to-snowflake
+  labels:
+    team: data-engineering
+    source: mongodb
+    destination: snowflake
+    sync_frequency: hourly
+    env: dev
+
+spec:
+  source:
+    name: mongodb-profiles-prod
+    connectorType: source-mongodb-v2
+    config:
+      connection_string: "${MONGODB_URI}"
+      database: "users"
+      collections:
+        - profiles
+        - events_meta
+        - consents
+
+  destination:
+    name: snowflake-dev
+    connectorType: destination-snowflake
+    config:
+      host:      "${SNOWFLAKE_ACCOUNT}.snowflakecomputing.com"
+      username:  "${SNOWFLAKE_USER}"
+      password:  "${SNOWFLAKE_PASSWORD}"
+      database:  "${SNOWFLAKE_DATABASE}"
+      schema:    "RAW_MONGODB"
+      warehouse: "${SNOWFLAKE_WAREHOUSE}"
+      role:      "${SNOWFLAKE_ROLE}"
+
+  syncCatalog:
+    streams:
+      - stream:
+          name: profiles
+          namespace: users
+        config:
+          syncMode: incremental
+          destinationSyncMode: append_dedup
+          cursorField: ["updated_at"]
+          primaryKey: [["_id"]]
+
+      - stream:
+          name: events_meta
+          namespace: users
+        config:
+          syncMode: incremental
+          destinationSyncMode: append_dedup
+          cursorField: ["updated_at"]
+          primaryKey: [["user_id"]]
+
+      - stream:
+          name: consents
+          namespace: users
+        config:
+          syncMode: incremental
+          destinationSyncMode: append_dedup
+          cursorField: ["updated_at"]
+          primaryKey: [["user_id"]]
+
+  schedule:
+    scheduleType: cron
+    cronExpression: "0 * * * *"    # toutes les heures
+
+  status: active
+
+  notificationSettings:
+    sendOnSuccess: false
+    sendOnFailure: true
+    notificationType: slack
+    slackConfiguration:
+      webhook: "${SLACK_WEBHOOK_DATA_ALERTS}"

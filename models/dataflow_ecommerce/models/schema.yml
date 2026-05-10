@@ -1,0 +1,92 @@
+version: 2
+
+models:
+  - name: stg_mongo_profiles
+    description: "Profils utilisateurs nettoyés depuis MongoDB Atlas"
+    columns:
+      - name: user_id
+        description: "Identifiant unique utilisateur"
+        tests:
+          - not_null
+          - unique
+      - name: country_code
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['FR','DE','ES','GB','IT','BE','NL','CH','PT','PL']
+      - name: customer_segment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['VIP','Loyal','New','Lapsed','At-Risk']
+      - name: predicted_churn_score
+        tests:
+          - not_null
+      - name: ltv_estimate_eur
+        tests:
+          - not_null
+
+  - name: dim_customers
+    description: "Dimension customers — star schema"
+    columns:
+      - name: customer_sk
+        description: "Surrogate key MD5"
+        tests:
+          - not_null
+          - unique
+      - name: user_id
+        tests:
+          - not_null
+          - unique
+      - name: churn_risk
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['low','medium','high']
+      - name: country_code
+        tests:
+          - not_null
+
+  - name: dim_time
+    description: "Dimension temps 2020-2030"
+    columns:
+      - name: time_sk
+        tests:
+          - not_null
+          - unique
+      - name: calendar_date
+        tests:
+          - not_null
+          - unique
+      - name: commercial_period
+        tests:
+          - accepted_values:
+              values: ['standard','black_friday_week','christmas_peak',
+                       'winter_sales','summer_sales']
+
+  - name: fact_orders
+    description: "Table de faits commandes"
+    columns:
+      - name: order_sk
+        tests:
+          - not_null
+          - unique
+      - name: customer_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_sk
+      - name: time_sk
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_time')
+              field: time_sk
+      - name: net_revenue_eur
+        tests:
+          - not_null
+      - name: payment_method
+        tests:
+          - accepted_values:
+              values: ['card','paypal','bank_transfer','apple_pay']
