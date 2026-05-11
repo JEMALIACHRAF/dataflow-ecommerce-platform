@@ -37,8 +37,7 @@
 ## 🏢 Business Context
 
 **DataFlow Solutions** is a Paris-based scale-up providing behavioral analytics
-to 200+ European e-commerce brands. The data team (8 engineers) was tasked with
-modernising a fragmented data infrastructure:
+to 200+ European e-commerce brands. 
 
 | Problem | Before | After |
 |---------|--------|-------|
